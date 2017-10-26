@@ -38,20 +38,11 @@ socketproxy écoute par défaut sur le port 9797 et fournit les microservice sui
 <tbody>
 <tr>
 <td>La valeur de retour :</td>
-<td>
-```json
-{"result":true,"ip":"216.58.213.131","time":10069000}
-```
-Time s'exprime en nanosecondes
-</td>
+<td>{"result":true,"ip":"216.58.213.131","time":10069000}<br/>Time s'exprime en nanosecondes</td>
 </tr>
 <tr>
 <td>La valeur de retour en cas d'erreur : </td>
-<td>
-```json
-{"result":false,"ip":"dfslk","time":0}
-```
-</td>
+<td>{"result":false,"ip":"dfslk","time":0}</td>
 </tr>
 </tbody>
 </table>
