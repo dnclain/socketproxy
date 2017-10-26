@@ -7,36 +7,39 @@ Je l'utilise pour palier à des instabilités de la librairie 'net-ping' pour no
 Il est prévu d'implémenter d'autres requêtes raw socket (UDP, TCP, ...) seulement si j'en ai besoin dans mes projets annexes (donc peut-être un jour :-/ ).
 
 ## Comment ça marche ?
-* Lancer la commande 'socketproxy' ou 'socketproxy.exe' comme suit :
-    ```bash
-    ./socketproxy [-h localhost] [-p 9797] [-privileged]
-    #	-h to define host instead of 'localhost'
-    #	-p to define port superior to 1024 instead of '9797'
-    #	-privileged to activate privileged ping mode'
-    ```
+Lancer la commande 'socketproxy' ou 'socketproxy.exe' comme suit :
+```bash
+./socketproxy [-h localhost] [-p 9797] [-privileged]
+#	-h to define host instead of 'localhost'
+#	-p to define port superior to 1024 instead of '9797'
+#	-privileged to activate privileged ping mode'
+```
 
-    Il est possible de l'embarquer dans un projet node comme suit :
-    ```javascript
-    // TODO
-    ```
+Il est possible de l'embarquer dans un projet node comme suit :
+```javascript
+// TODO
+```
 
-* socketproxy écoute par défaut sur le port 9797 et fournit les microservice suivants:
-    > http://localhost:9797/ping?timeout=2s&ip=192.168.XXX.XXX
-    >
-    > Paramètre timeout : respecter la syntaxe définie ici : https://golang.org/pkg/time/#ParseDuration
-    >
-    > Paramètr ip : l'ip vers lequel lancer un ping
-    >
-    > La valeur de retour :
-    ```json
-    {"result":true,"ip":"216.58.213.131","time":10069000}
-    ```
-    > Time s'exprime en nanosecondes
-    >
-    > La valeur de retour en cas d'erreur : 
-    ```json
-    {"result":false,"ip":"dfslk","time":0}
-    ```
+socketproxy écoute par défaut sur le port 9797 et fournit les microservice suivants:
+
+#### ping?timeout=2s&ip=192.168.XXX.XXX
+
+|Paramètre|Description
+|----     |-----
+|timeout  |Respecter la syntaxe définie ici : https://golang.org/pkg/time/#ParseDuration
+|ip       |L'ip vers lequel lancer un ping
+
+
+La valeur de retour :
+```json
+{"result":true,"ip":"216.58.213.131","time":10069000}
+```
+Time s'exprime en nanosecondes
+
+La valeur de retour en cas d'erreur : 
+```json
+{"result":false,"ip":"dfslk","time":0}
+```
 
 
 ## A veiller !
