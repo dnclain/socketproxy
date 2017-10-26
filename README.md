@@ -30,17 +30,35 @@ socketproxy écoute par défaut sur le port 9797 et fournit les microservice sui
 |ip       |L'ip vers lequel lancer un ping
 
 
+
+<table>
+<thead>
+<tr><td>Description</td><td>Code</td></tr>
+</thead>
+<tbody>
+<tr>
+<td>
 La valeur de retour :
+</td>
+<td>
 ```json
 {"result":true,"ip":"216.58.213.131","time":10069000}
 ```
 Time s'exprime en nanosecondes
-
+</td>
+</tr>
+<tr>
+</td>
 La valeur de retour en cas d'erreur : 
+</td>
+<td>
 ```json
 {"result":false,"ip":"dfslk","time":0}
 ```
-
+</td>
+</tr>
+</tbody>
+</table>
 
 ## A veiller !
 * Le repo principal n'est pas github. En récupérant les sources, assurez-vous donc de modifier le chemin du package vers pingutils.go dans le fichier cmd/main.go
