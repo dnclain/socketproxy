@@ -74,11 +74,11 @@ func main() {
 }
 
 type pingResult struct {
-	Result  bool   `json:"result"`
-	IP      string `json:"ip"`
-	Time    string `json:"time"`
-	Timeout bool   `json:"timeout"`
-	Error   string `json:"error"`
+	Result  bool          `json:"result"`
+	IP      string        `json:"ip"`
+	Time    time.Duration `json:"time"`
+	Timeout bool          `json:"timeout"`
+	Error   string        `json:"error"`
 }
 
 // Ping handler control
@@ -98,7 +98,7 @@ func controllerPing(w http.ResponseWriter, req *http.Request) {
 	packet := socketproxy.PingUtil(timeout, false, privileged, req.Form.Get("ip"))
 
 	// sends jsons objet by default
-	result := &pingResult{Result: false, IP: req.Form.Get("ip"), Time: "-1", Timeout: false, Error: "No packet"}
+	result := &pingResult{Result: false, IP: req.Form.Get("ip"), Time: 0, Timeout: false, Error: "No packet"}
 	if packet != nil {
 		result.Error = ""
 		if packet.Err != nil {
@@ -108,7 +108,7 @@ func controllerPing(w http.ResponseWriter, req *http.Request) {
 			result.IP = packet.IPAddrTo.IP.String()
 		}
 		result.Timeout = packet.Timeout
-		result.Time = packet.Time.String()
+		result.Time = packet.Time
 		result.Result = !packet.Timeout && packet.Err == nil
 		socketproxy.LogInfo(packet)
 	}

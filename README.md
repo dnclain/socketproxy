@@ -20,7 +20,7 @@ Il est possible de l'embarquer dans un projet node comme suit :
 // TODO
 ```
 
-socketproxy écoute par défaut sur le port 9797 et fournit les microservice suivants:
+socketproxy écoute par défaut sur le port 9797 et fournit le microservice suivant:
 
 #### ping?timeout=2s&ip=192.168.XXX.XXX
 
@@ -38,11 +38,15 @@ socketproxy écoute par défaut sur le port 9797 et fournit les microservice sui
 <tbody>
 <tr>
 <td>La valeur de retour :</td>
-<td>{"result":true,"ip":"216.58.213.131","time":10069000}<br/>Time s'exprime en nanosecondes</td>
+<td>{"result":true,"ip":"216.58.213.131","time":58620926,"timeout":false,"error":""}<br/>Time s'exprime en nanosecondes</td>
 </tr>
 <tr>
 <td>La valeur de retour en cas d'erreur : </td>
-<td>{"result":false,"ip":"dfslk","time":0}</td>
+<td>{"result":false,"ip":"xxx.xxx.xxx.xxx","time":0,"timeout":true,"error":"intitulé de l'erreur"}</td>
+</tr>
+<tr>
+<td>La valeur de retour en cas d'erreur du mode privilégié : </td>
+<td>{"result":false,"ip":"xxx.xxx.xxx.xxx","time":0,"Error":"No packet"}</td>
 </tr>
 </tbody>
 </table>
