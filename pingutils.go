@@ -1,43 +1,88 @@
 package socketproxy
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/speps/go-hashids"
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
 
-// PingUtil can ping any host
-func PingUtil(pTimeout time.Duration, pPrivileged bool, pHost string) *Packet {
-	log.Println("PingUtil")
-	pingertool, err := newPinger(pHost)
+func logLog(pPrefix string, pArMessages ...interface{}) {
+	var pArPrefix = []interface{}{pPrefix}
+	vArMessages := append(pArPrefix, pArMessages...)
+	log.Println(vArMessages...)
+}
+
+// LogTrace un log Trace
+func LogTrace(pArMessages ...interface{}) {
+	logLog("| T |", pArMessages...)
+}
+
+// LogDebug un log Debug
+func LogDebug(pArMessages ...interface{}) {
+	logLog("| D |", pArMessages...)
+}
+
+// LogInfo un log Info
+func LogInfo(pArMessages ...interface{}) {
+	logLog("| I |", pArMessages...)
+}
+
+// LogWarn un log Warn
+func LogWarn(pArMessages ...interface{}) {
+	logLog("| W |", pArMessages...)
+}
+
+// LogError un log Error
+func LogError(pArMessages ...interface{}) {
+	logLog("| E |", pArMessages...)
+}
+
+// LogFatal un log Fatal
+func LogFatal(pArMessages ...interface{}) {
+	logLog("| F |", pArMessages...)
+}
+
+// PingUtil can ping any host. Each echo request is independent.
+func PingUtil(pTimeout time.Duration, pDebug bool, pPrivileged bool, pHostDest string) *Packet {
+	LogDebug("Start PingUtil", "timeout:", pTimeout, "debug:", pDebug, "privileged:", pPrivileged, "host:", pHostDest)
+	vPingertool, err := newPinger(pHostDest, pDebug)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
+		LogError(fmt.Sprintf("%s", err.Error()))
 		return nil
 	}
 
-	pingertool.Timeout = pTimeout
-	pingertool.SetPrivileged(pPrivileged)
+	vPingertool.Timeout = pTimeout
+	LogInfo(vPingertool.ID, "|", "Timeout:", pTimeout)
+	vPingertool.SetPrivileged(pPrivileged)
+	LogInfo(vPingertool.ID, "|", "Priviledged mode:", pPrivileged)
 
-	return pingertool.run()
+	return vPingertool.run()
 }
 
-/******************
-	ORIGINAL CODE
- ******************/
+/*******************************
+	Independent ECHO REQUEST
+ *******************************/
 
 const (
-	timeSliceLength  = 8
-	protocolICMP     = 1
-	protocolIPv6ICMP = 58
+	// reserved time byte
+	cTimeSliceLength = 8
+	// ICMP ipv4 protocol version
+	cProtocolICMP = 1
+	// ICMP ipv6 protocole version
+	cProtocolIPv6ICMP = 58
 )
 
 var (
@@ -45,35 +90,134 @@ var (
 	ipv6Proto = map[string]string{"ip": "ip6:ipv6-icmp", "udp": "udp6"}
 )
 
-// NewPinger returns a new pinger struct pointer
-func newPinger(addr string) (*pinger, error) {
-	ipaddr, err := net.ResolveIPAddr("ip", addr)
+// Packet represents a received and processed ICMP echo packet.
+type Packet struct {
+	// Time is the total time taken to send and recieve one packet.
+	Time time.Duration
+
+	// Timeout indicates if a timeout occurs
+	Timeout bool
+
+	// Err indicates if an error occurs during the ping process.
+	Err error
+
+	// IPSupposedSource is the address of the host that is pinging.
+	IPSupposedSource *net.IP
+
+	// IPReplyTo is the address of the host where the ping reply where recieved.
+	IPReplyTo *net.Addr
+
+	// IPAddrTo is the address of the host being pinged.
+	IPAddrTo *net.IPAddr
+
+	// NBytes is the size of the echo reply
+	NBytes int
+
+	// PacketID is a random int from 0 to 65535 ID attached with the echo packet.
+	PacketID int
+
+	// ID is a unique hashID sends into the ICMP packet
+	ID string
+}
+
+// rawPacket est le contenu reçu
+type rawPacket struct {
+	// ipAddrHost is the address of the target of the packet (specifically, the sender of the originall ping)
+	ipAddrHost *net.Addr
+	bytes      []byte
+	nbytes     int
+}
+
+// externalIP return the first external ipv4/ipv6 address
+func externalIP() (*net.IP, error) {
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
 
-	log.Println("addr:", addr)
-
-	var ipv4 bool
-	if isIPv4(ipaddr.IP) {
-		ipv4 = true
-	} else if isIPv6(ipaddr.IP) {
-		ipv4 = false
+			return &ip, nil
+			/*			ip = ip.To4()
+						if ip == nil {
+							continue // not an ipv4 address
+						}
+						return ip.String(), nil */
+		}
 	}
-	log.Println("ipv4:", ipv4)
+	return nil, errors.New("are you connected to the network?")
+}
+
+// newPinger returns a new pinger struct pointer
+func newPinger(pAddr string, pDebug bool) (*pinger, error) {
+	// target IP
+	vIPAddrTo, err := net.ResolveIPAddr("ip", pAddr)
+	if err != nil {
+		return nil, err
+	}
+	LogInfo("Target IP resolved:", vIPAddrTo.String())
+
+	// source IP (TODO : must be the main root)
+	vIPFrom, err := externalIP()
+	if err != nil {
+		return nil, err
+	}
+	LogInfo("Source IP resolved:", vIPFrom.String())
+
+	vEncodedID := "no-id"
+	{
+		// create a unique hashid for this pinger.
+		vHashidConfig := hashids.NewData()
+		vHashidConfig.Salt = "1234567890àç!è§('(§è!çà)azertyuiopmlkjhgfdsqwxcvbn,;:="
+		vHashidConfig.MinLength = 10
+		vHashidEncoder, _ := hashids.NewWithData(vHashidConfig)
+		vEncodedID, _ = vHashidEncoder.Encode([]int{rand.Int(), rand.Int()})
+		LogInfo(vEncodedID, "|", "Packet ID generated")
+	}
+
+	// vIsIpv4 mode or not
+	var vIsIpv4 bool
+	if isIPv4(vIPAddrTo.IP) {
+		vIsIpv4 = true
+	} else if isIPv6(vIPAddrTo.IP) {
+		vIsIpv4 = false
+	}
+	LogDebug(vEncodedID, "|", "Mode ipv4:", vIsIpv4)
 
 	return &pinger{
-		ipaddr:  ipaddr,
-		addr:    addr,
+		ipAddrTo: vIPAddrTo,
+		ipFrom:   vIPFrom,
+		addr:     pAddr,
+		// par défaut, une seconde
 		Timeout: time.Second * 1,
-
+		ID:      vEncodedID,
 		network: "udp",
-		ipv4:    ipv4,
-		size:    timeSliceLength,
+		ipv4:    vIsIpv4,
+		size:    cTimeSliceLength,
 	}, nil
 }
 
-// pinger represents ICMP packet sender/receiver
+// pinger represents an ICMP packet sender/receiver
 type pinger struct {
 	// Timeout specifies a timeout before ping exits, regardless of how many
 	// packets have been received.
@@ -82,43 +226,25 @@ type pinger struct {
 	// Debug runs in debug mode
 	Debug bool
 
-	// Number of packets sent
-	PacketsSent int
+	// ID is the unique id for this pinger.
+	// This id is sent into the ICMP echo request packet to discriminate replies.
+	ID string
 
-	// Number of packets received
-	PacketsRecv int
+	// ipAddrFrom is the translated source ip address.
+	ipFrom *net.IP
+	// ipAddrTo is the translated target ip address.
+	ipAddrTo *net.IPAddr
 
-	// rtts is all of the Rtts
-	rtts []time.Duration
+	// addr is the original entered dest addr echo request
+	addr string
+	// ipv4 mode
+	ipv4 bool
+	// what ip must listen to incoming icmp packet
+	source string
+	// the size of timestamp in the packet
+	size int
 
-	ipaddr *net.IPAddr
-	addr   string
-
-	ipv4     bool
-	source   string
-	size     int
-	sequence int
-	network  string
-}
-
-type packet struct {
-	bytes  []byte
-	nbytes int
-}
-
-// Packet represents a received and processed ICMP echo packet.
-type Packet struct {
-	// Rtt is the round-trip time it took to ping.
-	Rtt time.Duration
-
-	// IPAddr is the address of the host being pinged.
-	IPAddr *net.IPAddr
-
-	// NBytes is the number of bytes in the message.
-	Nbytes int
-
-	// Seq is the ICMP sequence number.
-	Seq int
+	network string
 }
 
 // Addr returns the string ip address of the target host.
@@ -143,110 +269,140 @@ func (p *pinger) Privileged() bool {
 	return p.network == "ip"
 }
 
+// run démarre le ping get attend la réponse.
+// une configuration est au préalable nécessaire.
 func (p *pinger) run() *Packet {
-	var conn *icmp.PacketConn
+	// récupération d'un Listener de paquet ICMP
+	var vConn *icmp.PacketConn
 	if p.ipv4 {
-		if conn = p.listen(ipv4Proto[p.network], p.source); conn == nil {
+		if vConn = p.listen(ipv4Proto[p.network], p.source); vConn == nil {
 			return nil
 		}
 	} else {
-		if conn = p.listen(ipv6Proto[p.network], p.source); conn == nil {
+		if vConn = p.listen(ipv6Proto[p.network], p.source); vConn == nil {
 			return nil
 		}
 	}
 	// close sera appelé à la fin de la fonction.
-	defer conn.Close()
+	defer vConn.Close()
 
 	// unbuffered channel
-	recv := make(chan *rPacket)
-	// start the go routine (try to listen for return packet first)
-	go p.recvICMP(p.Timeout, conn, recv)
+	recv := make(chan *Packet)
+
+	// process a random ID for this particular packet.
+	vRandomID := rand.Intn(65535)
+
+	// starts the go routine (try to listen for return packet first)
+	go p.recvICMP(p.Timeout, vConn, vRandomID, recv)
 	// then send a packet
-	err := p.sendICMP(conn)
+	err := p.sendICMP(vConn, vRandomID)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 
+	// a mean to stop the current ping.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
 
-	var result *Packet
-	goOn := true
-	for goOn {
+	var vResult *Packet
+	vGoOn := true
+	for vGoOn {
 		select {
 		case <-c:
-			goOn = false
-		case r := <-recv:
-			if r.err != nil || r.timeout {
-				goOn = false
-			} else {
-				pkt, err := p.processPacket(r.packet)
-				if err != nil {
-					fmt.Println("FATAL: ", err.Error())
-				}
-				result = pkt
-				goOn = false
-			}
+			vGoOn = false
+		case vResult = <-recv:
+			vGoOn = false
 		}
+		// permet de ne pas trop consommer de ressource dans la boucle
+		time.Sleep(time.Microsecond * 1)
 	}
 
 	close(recv)
-	return result
-}
-
-type rPacket struct {
-	packet  *packet
-	time    time.Duration
-	timeout bool
-	err     error
+	return vResult
 }
 
 /**
- * Wait for an ICMP packet. Return the time.
+ * recvICMP waits for an ICMP packet and processes it. Only packets that are generated from conn are retrieved and process.
  */
-func (p *pinger) recvICMP(timeout time.Duration, conn *icmp.PacketConn, recv chan<- *rPacket) {
-	log.Println("recieveICMP")
-	start := time.Now()
-	bytes := make([]byte, 512)
-	conn.SetReadDeadline(time.Now().Add(timeout))
-	n, _, err := conn.ReadFrom(bytes)
-	duration := time.Since(start)
-	if err != nil {
-		if neterr, ok := err.(*net.OpError); ok {
-			if neterr.Timeout() {
-				log.Println("not cool => timeout. ", neterr)
-				recv <- &rPacket{packet: nil, time: duration, timeout: true, err: neterr}
+func (p *pinger) recvICMP(pTimeout time.Duration, pConn *icmp.PacketConn, pRandomID int, pChanRecv chan<- *Packet) {
+	vStart := time.Now()
+	LogInfo(p.ID, "|", "Waiting for incoming packet at:", vStart)
+	// retrieves a 512 bytes packet, the size of the packet that was generated before.
+	vArReplyBuffer := make([]byte, 512)
+	// recieve any packet that was generated by sendICMP function, but process only the one with double ID.
+	vNRecievedPacket := 0
+	for {
+		// timeout if we received only packets we did'nt expect, or if other error occurs.
+		vGeneralTimeout := time.Since(vStart)
+		if vGeneralTimeout < pTimeout {
+			pConn.SetReadDeadline(time.Now().Add(pTimeout - vGeneralTimeout))
+		} else {
+			LogInfo(p.ID, "|", "General Timeout. No packet suitable packet recieved within:", vGeneralTimeout)
+			pChanRecv <- &Packet{Err: fmt.Errorf("General timeout. Recieved " + strconv.Itoa(vNRecievedPacket) + " packets, but not the one we expected, or other problem may occurs"), ID: p.ID, PacketID: pRandomID, Time: vGeneralTimeout, Timeout: true, IPAddrTo: p.ipAddrTo, IPSupposedSource: p.ipFrom}
+			break
+		}
+
+		vBytesRed, vFrom, err := pConn.ReadFrom(vArReplyBuffer)
+		vDuration := time.Since(vStart)
+		if err != nil {
+			if neterr, ok := err.(*net.OpError); ok {
+				if neterr.Timeout() {
+					LogInfo(p.ID, "|", "Timeout:", neterr)
+					pChanRecv <- &Packet{Err: neterr, ID: p.ID, PacketID: pRandomID, Time: vDuration, Timeout: true, IPSupposedSource: p.ipFrom}
+					break
+				} else {
+					LogError(p.ID, "|", "Network error:", neterr)
+					// make sure
+					var vRawPacket = &rawPacket{bytes: vArReplyBuffer, nbytes: vBytesRed, ipAddrHost: &vFrom}
+					vPacket, _ := p.processPacket(vRawPacket)
+					pChanRecv <- vPacket
+					break
+				}
 			} else {
-				log.Println("not cool => error. ", neterr)
-				recv <- &rPacket{packet: &packet{bytes: bytes, nbytes: n}, time: duration, timeout: false, err: neterr}
+				LogWarn(p.ID, "|", "Unexpected Error. New attempt...:", neterr)
+				// not a network problem, new attempt next time
+			}
+		} else {
+			// récupère le packet, et s'assure que c'est bien pour lui
+			var rawPacket = &rawPacket{bytes: vArReplyBuffer, nbytes: vBytesRed, ipAddrHost: &vFrom}
+			processedPacket, err := p.processPacket(rawPacket)
+			if err != nil {
+				// TODO : en faire un fatal si nécessaire.
+				LogError(p.ID, "|", "Unexpected error processing the :", err)
+			}
+
+			if processedPacket.ID == p.ID && processedPacket.PacketID == pRandomID {
+				LogInfo(p.ID, "|", "Reply recieved within ", processedPacket.Time, " with packet ID ("+strconv.Itoa(processedPacket.PacketID)+")")
+				pChanRecv <- processedPacket
+				break
+			} else {
+				LogWarn(p.ID, "|", "Huh ? Unexpected reply recieved with ID ("+processedPacket.ID+") and packet ID ("+strconv.Itoa(processedPacket.PacketID)+"). Expected packet ID:", pRandomID)
+				vNRecievedPacket++
 			}
 		}
-	} else {
-		log.Println("cool => packet to channel")
-		recv <- &rPacket{packet: &packet{bytes: bytes, nbytes: n}, time: duration, timeout: false, err: nil}
 	}
 }
 
-func (p *pinger) processPacket(recv *packet) (*Packet, error) {
-	var bytes []byte
-	var proto int
+func (p *pinger) processPacket(pRecv *rawPacket) (*Packet, error) {
+	var vArBytesBuffer []byte
+	var vProto int
 	if p.ipv4 {
-		if p.network == "ip" {
-			bytes = ipv4Payload(recv.bytes)
+		if p.Privileged() {
+			vArBytesBuffer = ipv4Payload(pRecv.bytes)
 		} else {
-			bytes = recv.bytes
+			vArBytesBuffer = pRecv.bytes
 		}
-		proto = protocolICMP
+		vProto = cProtocolICMP
 	} else {
-		bytes = recv.bytes
-		proto = protocolIPv6ICMP
+		vArBytesBuffer = pRecv.bytes
+		vProto = cProtocolIPv6ICMP
 	}
 
 	var m *icmp.Message
 	var err error
-	if m, err = icmp.ParseMessage(proto, bytes[:recv.nbytes]); err != nil {
-		return nil, fmt.Errorf("Error parsing icmp message")
+	if m, err = icmp.ParseMessage(vProto, vArBytesBuffer[:pRecv.nbytes]); err != nil {
+		return nil, fmt.Errorf("Error parsing icmp message : " + err.Error())
 	}
 
 	if m.Type != ipv4.ICMPTypeEchoReply && m.Type != ipv6.ICMPTypeEchoReply {
@@ -255,28 +411,29 @@ func (p *pinger) processPacket(recv *packet) (*Packet, error) {
 	}
 
 	outPkt := &Packet{
-		Nbytes: recv.nbytes,
-		IPAddr: p.ipaddr,
+		NBytes:           pRecv.nbytes,
+		IPAddrTo:         p.ipAddrTo,
+		IPSupposedSource: p.ipFrom,
+		IPReplyTo:        pRecv.ipAddrHost,
 	}
 
 	switch pkt := m.Body.(type) {
 	case *icmp.Echo:
-		outPkt.Rtt = time.Since(bytesToTime(pkt.Data[:timeSliceLength]))
-		outPkt.Seq = pkt.Seq
-		p.PacketsRecv++
+		outPkt.Time = time.Since(bytesToTime(pkt.Data[:cTimeSliceLength]))
+		outPkt.PacketID = pkt.ID
+		outPkt.ID = (string)(pkt.Data[cTimeSliceLength:])
 	default:
 		// Very bad, not sure how this can happen
 		return nil, fmt.Errorf("Error, invalid ICMP echo reply. Body type: %T, %s",
 			pkt, pkt)
 	}
 
-	p.rtts = append(p.rtts, outPkt.Rtt)
-
 	return outPkt, nil
 }
 
-func (p *pinger) sendICMP(conn *icmp.PacketConn) error {
-	log.Println("sendICMP")
+// sendICMP envoie un packet icmp.
+func (p *pinger) sendICMP(conn *icmp.PacketConn, pRandomID int) error {
+	LogInfo(p.ID, "|", "Sending with Packet ID ", pRandomID)
 	var typ icmp.Type
 	if p.ipv4 {
 		typ = ipv4.ICMPTypeEcho
@@ -284,20 +441,20 @@ func (p *pinger) sendICMP(conn *icmp.PacketConn) error {
 		typ = ipv6.ICMPTypeEchoRequest
 	}
 
-	var dst net.Addr = p.ipaddr
-	if p.network == "udp" {
-		dst = &net.UDPAddr{IP: p.ipaddr.IP, Zone: p.ipaddr.Zone}
+	var dst net.Addr = p.ipAddrTo
+	if !p.Privileged() {
+		dst = &net.UDPAddr{IP: p.ipAddrTo.IP, Zone: p.ipAddrTo.Zone}
 	}
 
 	t := timeToBytes(time.Now())
-	if p.size-timeSliceLength != 0 {
-		t = append(t, byteSliceOfSize(p.size-timeSliceLength)...)
+	if p.size-cTimeSliceLength != 0 {
+		t = append(t, byteSliceOfSize(p.size-cTimeSliceLength)...)
 	}
+	t = append(t, []byte(p.ID)...)
 	bytes, err := (&icmp.Message{
 		Type: typ, Code: 0,
 		Body: &icmp.Echo{
-			ID:   rand.Intn(65535),
-			Seq:  p.sequence,
+			ID:   pRandomID,
 			Data: t,
 		},
 	}).Marshal(nil)
@@ -313,17 +470,16 @@ func (p *pinger) sendICMP(conn *icmp.PacketConn) error {
 				}
 			}
 		}
-		p.PacketsSent++
-		p.sequence++
 		break
 	}
+
 	return nil
 }
 
 func (p *pinger) listen(netProto string, source string) *icmp.PacketConn {
 	conn, err := icmp.ListenPacket(netProto, source)
 	if err != nil {
-		fmt.Printf("Error listening for ICMP packets: %s\n", err.Error())
+		LogError(p.ID, "|", "Error listening for ICMP packets:", err.Error())
 		return nil
 	}
 	return conn
