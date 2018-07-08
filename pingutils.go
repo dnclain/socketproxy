@@ -368,18 +368,25 @@ func (p *pinger) recvICMP(pTimeout time.Duration, pConn *icmp.PacketConn, pRando
 			var rawPacket = &rawPacket{bytes: vArReplyBuffer, nbytes: vBytesRed, ipAddrHost: &vFrom}
 			processedPacket, err := p.processPacket(rawPacket)
 			if err != nil {
-				// TODO : en faire un fatal si nécessaire.
-				LogError(p.ID, "|", "Unexpected error processing the :", err)
-			}
-
-			if processedPacket.ID == p.ID && processedPacket.PacketID == pRandomID {
-				LogInfo(p.ID, "|", "Reply recieved within ", processedPacket.Time, " with packet ID ("+strconv.Itoa(processedPacket.PacketID)+")")
-				pChanRecv <- processedPacket
+				LogError(p.ID, "|", "Unexpected error processing the packet :", err)
+				pChanRecv <- &Packet{Err: err, ID: p.ID, PacketID: pRandomID, Time: vDuration, Timeout: false, IPSupposedSource: p.ipFrom}
 				break
 			} else {
-				LogWarn(p.ID, "|", "Huh ? Unexpected reply recieved with ID ("+processedPacket.ID+") and packet ID ("+strconv.Itoa(processedPacket.PacketID)+"). Expected packet ID:", pRandomID)
-				vNRecievedPacket++
+				if processedPacket == nil {
+					LogWarn(p.ID, "|", "Packet recieved is not an ICMP one")
+					vNRecievedPacket++
+				} else {
+					if processedPacket.ID == p.ID && processedPacket.PacketID == pRandomID {
+						LogInfo(p.ID, "|", "Reply recieved within ", processedPacket.Time, " with packet ID ("+strconv.Itoa(processedPacket.PacketID)+")")
+						pChanRecv <- processedPacket
+						break
+					} else {
+						LogWarn(p.ID, "|", "Huh ? Unexpected reply recieved with ID ("+processedPacket.ID+") and packet ID ("+strconv.Itoa(processedPacket.PacketID)+"). Expected packet ID:", pRandomID)
+						vNRecievedPacket++
+					}
+				}
 			}
+
 		}
 	}
 }
