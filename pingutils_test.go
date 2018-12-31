@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"local-git.dcn.ovh/dclain/dcn-gokit/kitlog"
 )
 
 // lancer avec go test -v pour afficher les logs
 func TestExternalIP(t *testing.T) {
+	kitlog.LogLevel = kitlog.INFO
 	vIP, err := externalIP()
 	if err != nil {
 		fmt.Println("Error: ", err)
@@ -18,6 +21,7 @@ func TestExternalIP(t *testing.T) {
 }
 
 func TestPingUtil(t *testing.T) {
+	kitlog.LogLevel = kitlog.INFO
 	vPacket := PingUtil(time.Second*2, false, false, "www.google.fr")
 
 	if vPacket.Err != nil {
@@ -36,6 +40,7 @@ func TestPingUtil(t *testing.T) {
 	}
 }
 func TestPingUtil_Case_DoublePing(t *testing.T) {
+	kitlog.LogLevel = kitlog.INFO
 	vPacket1 := PingUtil(time.Second*3, false, false, "www.bloop.org")
 	vPacket2 := PingUtil(time.Second*1, false, false, "www.google.fr")
 

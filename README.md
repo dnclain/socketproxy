@@ -9,10 +9,11 @@ Il est prévu d'implémenter d'autres requêtes raw socket (UDP, TCP, ...) seule
 ## Comment ça marche ?
 Lancer la commande 'socketproxy' ou 'socketproxy.exe' comme suit :
 ```bash
-./socketproxy [-h localhost] [-p 9797] [-privileged]
+./socketproxy [-h localhost] [-p 9797] [-privileged] [-debug]
 #	-h to define host instead of 'localhost'
 #	-p to define port superior to 1024 instead of '9797'
-#	-privileged to activate privileged ping mode'
+#	-privileged to activate privileged ping mode
+#   -debug to activate debug traces
 ```
 
 Il est possible de l'embarquer dans un projet node comme suit :
