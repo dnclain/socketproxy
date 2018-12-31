@@ -1,4 +1,4 @@
-# Go Http socket proxy
+# Go Http socket proxy V1.0.1
 
 Ce projet *exemple* se base sur le code de [sparrc](https://github.com/sparrc/go-ping). Chaque appel à la commande ping réalise un ping unique, contrairement à celui de sparrc. Il appartient à l'appelant d'encapsuler son ping dans une go routine.
 
@@ -15,6 +15,16 @@ Lancer la commande 'socketproxy' ou 'socketproxy.exe' comme suit :
 #	-privileged to activate privileged ping mode
 #   -debug to activate debug traces
 ```
+
+Si le port 9797 est occupé, le port suivant est utilisé. Ce test de disponibilité s'effectuera 5 fois maximum (du port 9797 au port 9801).
+Au démarrage, l'application affichera :
+
+```text
+2018/12/31 11:26:10 | I | socketproxy | Found free TCP Port 9797
+{"freePort" : 9797}
+```
+
+Une application appelante peut alors filtrer pour ce retour pour détecter le numéro de port.
 
 Il est possible de l'embarquer dans un projet node comme suit :
 ```javascript
@@ -54,3 +64,4 @@ socketproxy écoute par défaut sur le port 9797 et fournit le microservice suiv
 
 ## A veiller !
 * Le repo principal n'est pas github. En récupérant les sources, assurez-vous donc de modifier le chemin du package vers pingutils.go dans le fichier cmd/main.go
+* Ce projet dépend d'autres librairies qui ne sont pas publiques. Merci de développer votre propre base de code, notamment pour les logs.

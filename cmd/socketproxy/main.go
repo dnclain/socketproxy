@@ -82,6 +82,9 @@ var logSP kitlog.Log
 var logUS kitlog.Log
 
 func init() {
+	fmt.Printf("-----------------------------------\n")
+	fmt.Printf("Version %s\n", "1.0.1")
+	fmt.Printf("-----------------------------------\n")
 	flag.Usage = func() {
 		fmt.Println(usage)
 		os.Exit(-1)
