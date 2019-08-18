@@ -48,7 +48,7 @@ func selectFreePort(host string, port int) int {
 	if vNope {
 		logSP.Fatal("Unable to find a free port, event after {} tries. Stopping the process...", i-1)
 	} else {
-		fmt.Printf("{\"freePort\" : %d}", vResult)
+		fmt.Printf("{\"freePort\" : %d}\n", vResult)
 	}
 
 	return vResult
@@ -95,7 +95,7 @@ func init() {
 
 func main() {
 	host := flag.String("h", "localhost", "the host")
-	port := flag.Int("p", 9797, "the port")
+	port := flag.Int("p", 9797, "the port > 1024")
 	priv := flag.Bool("privileged", false, "if ping is privileged or not")
 	dbg := flag.Bool("debug", false, "display debug traces")
 
